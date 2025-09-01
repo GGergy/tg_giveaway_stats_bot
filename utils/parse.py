@@ -1,4 +1,3 @@
-import dataclasses
 import re
 import datetime
 
@@ -51,9 +50,7 @@ def parse_date(message: Message) -> datetime.datetime:
 def parse_links(message: Message) -> list[str]:
     links = []
     direct = link_pat.findall(text_or_caption(message))
-    print(text_or_caption(message))
     links.extend(direct)
-    print((message.entities, message.caption_entities))
     for entities in (message.entities, message.caption_entities):
         if not entities:
             continue
@@ -65,11 +62,3 @@ def parse_links(message: Message) -> list[str]:
     if not links:
         links.append(message.forward_from_chat.username)
     return links
-
-
-@dataclasses.dataclass
-class Msg:
-    text: str
-    entities: list[str]
-
-

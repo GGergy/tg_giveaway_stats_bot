@@ -22,3 +22,24 @@ msgstr "Вы уже внесли запись об этом розыгрыше"
 
 msgid "close"
 msgstr "❌Закрыть"
+
+msgid "invalid_date"
+msgstr "Введена неверная дата, вы ввели: {{ date }}. Введите дату в формате dd.mm.yyyy"
+
+msgid "edit_channels_t"
+msgstr "Настройка каналов розыгрыша"
+
+msgid "delete_channel_b"
+msgstr "🗑️"
+
+msgid "date_changed"
+msgstr "Дата окончания розыгрыша изменена"
+
+msgid "Enter_new_date"
+msgstr "Введите новую дату в формате dd.mm.yyyy"
+
+msgid "add_channel_b"
+msgstr "➕"
+
+msgid "back_to_gw_b"
+msgstr "🔙Назад"

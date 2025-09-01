@@ -17,7 +17,7 @@ class Settings:
     log_file: pathlib.Path
     messages_file: pathlib.Path
     default_date = datetime(1970, 1, 1)
-    pyro_timeout = 10
+    pyro_timeout = 5 * 60
 
     def __post_init__(self):
         for field in dataclasses.fields(self):
