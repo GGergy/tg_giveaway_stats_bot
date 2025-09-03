@@ -1,6 +1,5 @@
 from sqlalchemy import create_engine, orm
 
-from utils.config import settings
 
 SqlAlchemyBase = orm.declarative_base()
 

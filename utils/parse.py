@@ -59,6 +59,6 @@ def parse_links(message: Message) -> list[str]:
                 groups = link_pat.match(entity.url).groups()
                 if groups:
                     links.append(groups[0])
-    if not links:
+    if not links and message.forward_from_chat:
         links.append(message.forward_from_chat.username)
-    return links
+    return list(set(links))

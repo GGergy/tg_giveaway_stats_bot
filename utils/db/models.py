@@ -19,6 +19,7 @@ class User(SqlAlchemyBase):
 
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)
     username = sqlalchemy.Column(sqlalchemy.String, nullable=True)
+    notifies = sqlalchemy.Column(sqlalchemy.Boolean, default=True)
     giveaways = relationship("Giveaway", cascade="delete, all")
 
 
