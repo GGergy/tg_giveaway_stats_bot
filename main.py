@@ -1,13 +1,14 @@
 from datetime import datetime
 
-from pyrogram import Client, filters, types
+from pyrogram import Client, filters, types, errors
 import pyrostep
+from sqlalchemy.orm import load_only
 
 from utils.config import settings
 from utils.callback_io import call_out, filter_generator, CallbackDataManager
 from utils.parse import parse_date, parse_links
 from utils.db.models import User, conn, Giveaway, Channel
-from utils.textutil import (gettext,
+from utils.textutil import (gettext, truncate,
     # find_usages
                             )
 
@@ -118,7 +119,7 @@ async def edit_date(_, call: types.CallbackQuery):
             giveaway = session.get(Giveaway, giveaway_id)
             giveaway.end_date = date
             session.commit()
-    mk = types.InlineKeyboardMarkup([[types.InlineKeyboardButton(text=gettext("back_to_gw_b"),
+    mk = types.InlineKeyboardMarkup([[types.InlineKeyboardButton(text=gettext("back"),
                                                                  callback_data=call_out("giveaway_setup",
                                                                                         giveaway_id=giveaway_id))]])
     await call.message.edit(text=gettext("date_changed" if date else "date_kept"), reply_markup=mk)
@@ -142,7 +143,7 @@ async def edit_channels(_, call: types.CallbackQuery):
         mk.inline_keyboard.append([types.InlineKeyboardButton(text=gettext("add_channel_b"),
                                                               callback_data=call_out("add_channel",
                                                                                      gw_id=giveaway_id)),
-                                   types.InlineKeyboardButton(text=gettext("back_to_gw_b"),
+                                   types.InlineKeyboardButton(text=gettext("back"),
                                                               callback_data=call_out("giveaway_setup",
                                                                                      giveaway_id=giveaway_id))])
         await call.message.edit(text=gettext("edit_channels_t"), reply_markup=mk)
@@ -158,7 +159,7 @@ async def delete_channel(_, call: types.CallbackQuery):
         channel = session.get(Channel, channel_id)
         giveaway.channels.remove(channel)
         session.commit()
-    mk = types.InlineKeyboardMarkup([[types.InlineKeyboardButton(text=gettext("back_to_gw_b"),
+    mk = types.InlineKeyboardMarkup([[types.InlineKeyboardButton(text=gettext("back"),
                                                                  callback_data=call_out("change_channels",
                                                                                         giveaway_id=giveaway_id))]])
     await call.message.edit(text=gettext("channel_deleted"), reply_markup=mk)
@@ -203,7 +204,7 @@ async def add_channel(_, call: types.CallbackQuery):
             giveaway = session.get(Giveaway, giveaway_id)
             giveaway.channels.append(channel)
             session.commit()
-    mk = types.InlineKeyboardMarkup([[types.InlineKeyboardButton(text=gettext("back_to_gw_b"),
+    mk = types.InlineKeyboardMarkup([[types.InlineKeyboardButton(text=gettext("back"),
                                                                  callback_data=call_out("change_channels",
                                                                                         giveaway_id=giveaway_id))]])
     await call.message.edit(text=gettext("channel_added" if name else "channel_not_added"), reply_markup=mk)
@@ -213,8 +214,12 @@ async def add_channel(_, call: types.CallbackQuery):
 async def back_to_gw(_, call: types.CallbackQuery):
     with CallbackDataManager(call.data) as mgr:
         giveaway_id = mgr.get("giveaway_id", typeof=int)
+        send_msg = mgr.get("send_msg", typeof=bool)
     with conn() as session:
         giveaway = session.get(Giveaway, giveaway_id)
+        if not giveaway:
+            await app.answer_callback_query(call.id, text=gettext("giveaway_not_found"))
+            return
         links = [channel.name for channel in giveaway.channels]
         date = giveaway.end_date
     kb = types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text=gettext("change_date_b"),
@@ -227,11 +232,21 @@ async def back_to_gw(_, call: types.CallbackQuery):
                                                                                      giveaway_id=giveaway.id))],
                                                      [types.InlineKeyboardButton(text=gettext("close"),
                                                                                  callback_data=call_out("close"))]])
-    await call.message.edit(reply_markup=kb, disable_web_page_preview=True,
-                            text=gettext("edit_giveaway",
-                                         date=date.strftime("%d.%m.%Y") if date > settings.default_date else gettext(
-                                             "date_not_parsed"),
-                                         channels="\n".join(map(lambda x: "@" + x, links))))
+    text = gettext("edit_giveaway",
+                   date=date.strftime("%d.%m.%Y") if date > settings.default_date else gettext(
+                       "date_not_parsed"),
+                   channels="\n".join(map(lambda x: "@" + x, links)))
+    await app.answer_callback_query(call.id)
+    print(errors.BadRequest.__class__)
+    if send_msg:
+        try:
+            msg = await app.forward_messages(call.message.chat.id, giveaway.chat_id, [giveaway.message_id])
+            await call.message.reply(text=text, reply_markup=kb, disable_web_page_preview=True,
+                                     reply_to_message_id=msg[0].id)
+        except errors.exceptions.bad_request_400:
+            await call.message.reply(text=text, reply_markup=kb, disable_web_page_preview=True)
+        return
+    await call.message.edit(reply_markup=kb, disable_web_page_preview=True, text=text)
 
 
 @app.on_message(filters.command("menu"))
@@ -242,9 +257,70 @@ async def menu(_, message: types.Message):
     mk = types.InlineKeyboardMarkup(
         [[types.InlineKeyboardButton(text=gettext("my_giveaways_b"), callback_data=call_out("my_giveaways"))],
          [types.InlineKeyboardButton(text=gettext("my_channels_b"), callback_data=call_out("my_channels"))],
-         types.InlineKeyboardButton(text=gettext("notify_b") + is_notify, callback_data=call_out("switch_notify"))])
+         [types.InlineKeyboardButton(text=gettext("notify_b") + is_notify, callback_data=call_out("switch_notify"))]])
     await message.reply(text=gettext("menu_text"), reply_markup=mk)
     await message.delete()
+
+
+@app.on_callback_query(filter_generator("my_giveaways"))
+async def choose_gwlist_type(_, call: types.CallbackQuery):
+    mk = types.InlineKeyboardMarkup(
+        [
+            [types.InlineKeyboardButton(text=gettext("my_active_gw"), callback_data=call_out("gw_list", p=1, a=True))],
+            [types.InlineKeyboardButton(text=gettext("my_archived_gw"),
+                                        callback_data=call_out("gw_list", p=1, a=False))]
+        ]
+    )
+    await call.message.edit(text=gettext("choose_gwlist_type"), reply_markup=mk)
+
+
+@app.on_callback_query(filter_generator("gw_list"))
+async def display_giveaways(_, call: types.CallbackQuery):
+    with CallbackDataManager(call.data) as mgr:
+        is_active = mgr.get("a", typeof=bool)
+        page = mgr.get("p", typeof=int)
+    if page < 1:
+        await app.answer_callback_query(call.id, text=gettext("page_empty"), show_alert=True)
+        return
+    with conn() as session:
+        giveaways = session.query(Giveaway).filter_by(user_id=call.message.chat.id, archived=not is_active).options(
+            load_only(Giveaway.title, Giveaway.end_date)).order_by(Giveaway.end_date.asc())[
+            (page - 1) * settings.page_size: page * settings.page_size]
+    if not giveaways:
+        await app.answer_callback_query(call.id, text=gettext("page_empty"), show_alert=True)
+        return
+    mk = types.InlineKeyboardMarkup([])
+    for giveaway in giveaways:
+        end = giveaway.end_date
+        if end == settings.default_date:
+            end = gettext("date_not_parsed")
+        else:
+            end = end.strftime("%d.%m.%Y")
+        mk.inline_keyboard.append([types.InlineKeyboardButton(
+            text=gettext("gw_button", title=truncate(giveaway.title, 30), end=end),
+            callback_data=call_out("giveaway_setup", giveaway_id=giveaway.id, send_msg=True))])
+    mk.inline_keyboard.append(
+        [types.InlineKeyboardButton(text=gettext("prev_b"),
+                                    callback_data=call_out("gw_list", a=is_active, p=page - 1)),
+         types.InlineKeyboardButton(text=gettext("next_b"),
+                                    callback_data=call_out("gw_list", a=is_active, p=page + 1)),
+         types.InlineKeyboardButton(text=gettext("back"),
+                                    callback_data=call_out("my_giveaways"))])
+
+    await call.message.edit(text=gettext("your_active_gw" if is_active else "your_archived_gw"), reply_markup=mk)
+
+
+@app.on_callback_query(filter_generator("switch_notify"))
+async def switch_notify(_, call: types.CallbackQuery):
+    with conn() as session:
+        user = session.get(User, call.message.chat.id)
+        user.notifies = not user.notifies
+        is_notify = gettext("notify") if user.notifies else gettext("no_notify")
+        session.commit()
+    notify_b = types.InlineKeyboardButton(text=gettext("notify_b") + is_notify, callback_data=call_out("switch_notify"))
+    mk = call.message.reply_markup
+    mk.inline_keyboard[-1] = [notify_b]
+    await call.message.edit_reply_markup(mk)
 
 
 @app.on_callback_query(filters=filter_generator("close"))
@@ -259,5 +335,6 @@ async def close(_, call: types.CallbackQuery):
 @app.on_message()
 async def deleter(_, message: types.Message):
     await message.delete()
+
 
 app.run()

@@ -36,6 +36,7 @@ class Giveaway(SqlAlchemyBase):
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
     title = sqlalchemy.Column(sqlalchemy.String)
     end_date = sqlalchemy.Column(sqlalchemy.DateTime)
+    archived = sqlalchemy.Column(sqlalchemy.Boolean, default=False)
     user_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey('users.id'))
     chat_id = sqlalchemy.Column(sqlalchemy.Integer)
     message_id = sqlalchemy.Column(sqlalchemy.Integer)

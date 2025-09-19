@@ -31,6 +31,12 @@ def gettext(key: str, **kwargs) -> str:
     return key
 
 
+def truncate(text: str, chars: int) -> str:
+    if len(text) <= chars:
+        return text
+    return text[:chars - 3] + "..."
+
+
 def find_usages(file: pathlib.Path, funcname: str = "gt") -> None:
     with open(file) as rf:
         data = rf.read()

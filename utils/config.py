@@ -18,6 +18,7 @@ class Settings:
     messages_file: pathlib.Path
     default_date = datetime(1970, 1, 1)
     pyro_timeout = 5 * 60
+    page_size = 1
 
     def __post_init__(self):
         for field in dataclasses.fields(self):
